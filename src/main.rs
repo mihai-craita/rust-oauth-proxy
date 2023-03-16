@@ -7,7 +7,7 @@ use proxy::*;
 use std::collections::HashMap;
 use dotenvy::dotenv;
 use std::env;
-use filters::with_auth_client;
+use filters::{log_response, with_auth_client};
 
 #[tokio::main]
 async fn main() {
@@ -48,9 +48,9 @@ async fn main() {
         .or(auth_step)
         .or(proxy_route);
 
-    println!("Start server\n");
+    let port = 3030;
+    println!("The server starts on port: {} \n", port);
     warp::serve(routes)
-        .run(([0, 0, 0, 0], 3030))
+        .run(([0, 0, 0, 0], port))
         .await;
-
 }

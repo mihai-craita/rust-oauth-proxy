@@ -1,6 +1,6 @@
 use cookie::Cookie;
 use warp::reject;
-use warp::{self, http, hyper::Body, Rejection, Reply, http::Response as HttpResponse};
+use warp::{self, http, Rejection, Reply, http::Response as HttpResponse};
 use oauth2::basic::BasicClient;
 use oauth2::{AuthorizationCode, AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, PkceCodeVerifier, TokenResponse, TokenUrl};
 use oauth2::reqwest::async_http_client;
@@ -8,11 +8,6 @@ use std::collections::HashMap;
 
 mod errors;
 mod cookie;
-
-pub async fn log_response(response: HttpResponse<Body>) -> Result<impl Reply, Rejection> {
-    println!("{:?}", response);
-    Ok(response)
-}
 
 pub fn redirect(auth_client: BasicClient) -> HttpResponse<String> {
 
