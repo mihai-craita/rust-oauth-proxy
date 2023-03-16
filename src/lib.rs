@@ -1,3 +1,4 @@
+use cookie::Cookie;
 use warp::reject;
 use warp::{self, http, hyper::Body, Rejection, Reply, http::Response as HttpResponse};
 use oauth2::basic::BasicClient;
@@ -6,6 +7,7 @@ use oauth2::reqwest::async_http_client;
 use std::collections::HashMap;
 
 mod errors;
+mod cookie;
 
 pub async fn log_response(response: HttpResponse<Body>) -> Result<impl Reply, Rejection> {
     println!("{:?}", response);
@@ -25,12 +27,11 @@ pub fn redirect(auth_client: BasicClient) -> HttpResponse<String> {
     let auth_url = auth_url.to_string();
 
     let body = format!("Go here to login: \n\n{}\n\n", auth_url);
-    let mut cookie_value = String::from("pkce=");
-    cookie_value.push_str(pkce_verifier.secret());
-    cookie_value.push_str("; Expires=2024-03-13T00:00:00.000Z; HttpOnly");
+
+    let cookie = Cookie::new("pkce", pkce_verifier.secret().to_string());
     let resp = HttpResponse::builder()
         .status(http::StatusCode::OK)
-        .header(http::header::SET_COOKIE, cookie_value)
+        .header(http::header::SET_COOKIE, cookie.to_string())
         .body(body).unwrap();
     resp
 }
@@ -50,7 +51,6 @@ pub async fn token(cookie: Option<String>, query: HashMap<String, String>, auth_
         .body(String::from("Internal server error, missing code from query")).unwrap();
     let code = match code {
         Some(code) => code,
-        //None => return Err(reject::custom(errors::ResponseBuildError))
         None => return  Ok(r)
     };
 
@@ -59,7 +59,6 @@ pub async fn token(cookie: Option<String>, query: HashMap<String, String>, auth_
             let pkce_verifier = PkceCodeVerifier::new(cookie.to_string());
             let token_result = auth_client
                 .exchange_code(AuthorizationCode::new(code.to_string()))
-                // Set the PKCE code verifier.
                 .set_pkce_verifier(pkce_verifier)
                 .request_async(async_http_client)
                 .await;
@@ -85,11 +84,10 @@ pub async fn token(cookie: Option<String>, query: HashMap<String, String>, auth_
         Ok(resp) => Ok(resp),
         Err(_err) => Err(reject::custom(errors::ResponseBuildError)),
     }
-    //resp
 }
 
+/// Builds an oauth2 client
 pub fn build_client(auth_url: String, token_url: String, client_id: String, client_secret: String, redirect_url: String) -> BasicClient {
-
     BasicClient::new(
         ClientId::new(client_id),
         Some(ClientSecret::new(client_secret)),
