@@ -9,13 +9,13 @@ use std::collections::HashMap;
 mod errors;
 mod cookie;
 
-pub fn redirect(auth_client: BasicClient) -> HttpResponse<String> {
+pub fn redirect(auth_client: BasicClient, scopes: Vec<Scope>) -> HttpResponse<String> {
 
     let (pkce_challenge, pkce_verifier) = PkceCodeChallenge::new_random_sha256();
-
+    let scopes_iter = scopes.into_iter();
     let (auth_url, _csrf_token) = auth_client
         .authorize_url(CsrfToken::new_random)
-        .add_scope(Scope::new("*".to_string()))
+        .add_scopes(scopes_iter)
         .set_pkce_challenge(pkce_challenge)
         .url();
 
@@ -38,6 +38,7 @@ impl Reply for ReplyError {
         HttpResponse::new(format!("message: " ).into())
     }
 }
+
 pub async fn token(cookie: Option<String>, query: HashMap<String, String>, auth_client: BasicClient) -> Result<HttpResponse<String>, Rejection> {
 
     let code = query.get("code");

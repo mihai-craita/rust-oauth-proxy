@@ -1,4 +1,3 @@
-mod errors;
 mod filters;
 
 use warp::{self, http, Filter};
@@ -7,7 +6,7 @@ use proxy::*;
 use std::collections::HashMap;
 use dotenvy::dotenv;
 use std::env;
-use filters::{log_response, with_auth_client};
+use filters::{log_response, with_auth_client, with_scopes};
 
 #[tokio::main]
 async fn main() {
@@ -18,6 +17,7 @@ async fn main() {
     let client_id = env::var("CLIENT_ID").expect("Missing .env variable CLIENT_ID");
     let client_secret = env::var("CLIENT_SECRET").expect("Missing .env variable CLIENT_SECRET");
     let redirect_url = env::var("REDIRECT_URL").expect("Missing .env REDIRECT_URL");
+    let scopes = env::var("SCOPES").expect("Missing .env variable SCOPES");
 
     let auth_client = build_client(auth_server, token_url, client_id, client_secret, redirect_url);
 
@@ -26,6 +26,7 @@ async fn main() {
 
     let auth_step = warp::path!("oauth" / "auth")
         .and(with_auth_client(auth_client.clone()))
+        .and(with_scopes(scopes))
         .map(redirect);
 
     let auth_route = warp::path!("oauth" / "callback")

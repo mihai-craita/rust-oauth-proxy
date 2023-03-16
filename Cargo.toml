@@ -6,7 +6,7 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-oauth2 = "4.3"
+oauth2 = { version = "4.3", git = "https://github.com/mihai-craita/oauth2-rs" }
 tokio = { version = "1", features = ["full"] }
 warp = "0.3"
 warp-reverse-proxy = "1"
