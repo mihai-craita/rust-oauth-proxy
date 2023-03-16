@@ -21,8 +21,8 @@ async fn main() {
 
     let auth_client = build_client(auth_server, token_url, client_id, client_secret, redirect_url);
 
-    let health_route = warp::path!("health")
-        .map(|| http::StatusCode::OK);
+    let ping_route = warp::path!("ping")
+        .map(|| warp::reply::with_status("pong", http::StatusCode::OK));
 
     let auth_step = warp::path!("oauth" / "auth")
         .and(with_auth_client(auth_client.clone()))
@@ -35,24 +35,15 @@ async fn main() {
         // .recover(handle_errors)
         //.and(warp::header::headers_cloned())
         .and_then(token);
-        // .map(|c| token);
 
     let proxy_route = warp::any()
-        // .and(warp::query::<HashMap<String, String>>())
-        // .and(warp::path::full())
-        // .and(warp::method())
         .and(
             reverse_proxy_filter("".to_string(), "http://127.0.0.1:8089/".to_string())
             .and_then(log_response),
             );
-        // .map(|q: HashMap<_, _>, p: FullPath, method| {
-        //     let path = p.as_str();
-        //     format!("method: {}\npath: {}\nquery: {:?}", method, path, q)
-        // });
-
 
     let routes = warp::any()
-        .and(health_route)
+        .and(ping_route)
         .or(auth_route)
         .or(auth_step)
         .or(proxy_route);
