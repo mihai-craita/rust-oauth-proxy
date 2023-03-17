@@ -5,9 +5,11 @@ use oauth2::basic::BasicClient;
 use oauth2::{AuthorizationCode, AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, PkceCodeVerifier, TokenResponse, TokenUrl};
 use oauth2::reqwest::async_http_client;
 use std::collections::HashMap;
+use uuid::Uuid;
 
 mod errors;
 mod cookie;
+mod cache;
 
 pub fn redirect(auth_client: BasicClient, scopes: Vec<Scope>) -> HttpResponse<String> {
 
@@ -21,11 +23,12 @@ pub fn redirect(auth_client: BasicClient, scopes: Vec<Scope>) -> HttpResponse<St
 
     let auth_url = auth_url.to_string();
 
-    let body = format!("Go here to login: \n\n{}\n\n", auth_url);
+    let body = format!("Go here to login: \n<br><a href=\"{}\">{}</a>\n\n", auth_url, auth_url);
 
     let cookie = Cookie::new("pkce", pkce_verifier.secret().to_string());
     let resp = HttpResponse::builder()
         .status(http::StatusCode::OK)
+        .header(http::header::CONTENT_TYPE, "text/html; charset=utf-8")
         .header(http::header::SET_COOKIE, cookie.to_string())
         .body(body).unwrap();
     resp
@@ -39,44 +42,58 @@ impl Reply for ReplyError {
     }
 }
 
-pub async fn token(cookie: Option<String>, query: HashMap<String, String>, auth_client: BasicClient) -> Result<HttpResponse<String>, Rejection> {
+pub async fn token(
+    cookie: Option<String>, query: HashMap<String, String>, auth_client: BasicClient, cache: cache::Cache) -> Result<HttpResponse<String>, Rejection> {
 
     let code = query.get("code");
-    let r = HttpResponse::builder()
-        .status(http::StatusCode::INTERNAL_SERVER_ERROR)
-        .body(String::from("Internal server error, missing code from query")).unwrap();
     let code = match code {
         Some(code) => code,
-        None => return  Ok(r)
+        None => {
+            let r = HttpResponse::builder()
+                .status(http::StatusCode::INTERNAL_SERVER_ERROR)
+                .body(String::from("Internal server error, missing code from query"))
+                .unwrap();
+            return  Ok(r)
+        }
     };
 
-    let body = match cookie {
-        Some(cookie) => {
-            let pkce_verifier = PkceCodeVerifier::new(cookie.to_string());
-            let token_result = auth_client
-                .exchange_code(AuthorizationCode::new(code.to_string()))
-                .set_pkce_verifier(pkce_verifier)
-                .request_async(async_http_client)
-                .await;
 
-            match token_result {
-                Ok(token) => {
-                    let r = token.access_token();
-                    format!("Token was read: {}", r.secret())
-                },
-                Err(err) => {
-                    println!("{:#?}", err);
-                    let mut tmp = String::from("Auth server ");
-                    tmp.push_str(&err.to_string());
-                    tmp
-                },
-            }
-        },
-        None => "Request invalid: Missing cookie on request".to_string(),
-    };
+    if None == cookie {
+        // None => "Request invalid: Missing cookie on request".to_string(),
+        return Err(reject::custom(errors::ResponseBuildError));
+    }
+    let cookie = cookie.unwrap().to_string();
+    let pkce_verifier = PkceCodeVerifier::new(cookie);
+    let token_result = auth_client
+        .exchange_code(AuthorizationCode::new(code.to_string()))
+        .set_pkce_verifier(pkce_verifier)
+        .request_async(async_http_client)
+        .await;
+
+    if let Err(err) = token_result {
+        println!("{:#?}", err);
+        let mut tmp = String::from("Auth server ");
+        tmp.push_str(&err.to_string());
+        let resp = HttpResponse::builder()
+            .body(tmp);
+        return match resp {
+            Ok(resp) => Ok(resp),
+            Err(_err) => Err(reject::custom(errors::ResponseBuildError)),
+        }
+    }
+    let token_result = token_result.expect("Unexpected token_result can never be an Err");
+    let token = token_result.access_token().secret();
+    let session_id = Uuid::new_v4();
+    let mut hash = cache.lock().await;
+    hash.insert(session_id.to_string(), token.to_string());
+
+    let cookie = Cookie::new("proxy_token", session_id.to_string());
+
+    let body = format!("Token was read");
     let resp = HttpResponse::builder()
+        .header(http::header::SET_COOKIE, cookie.to_string())
         .body(body);
-    match resp {
+    return match resp {
         Ok(resp) => Ok(resp),
         Err(_err) => Err(reject::custom(errors::ResponseBuildError)),
     }

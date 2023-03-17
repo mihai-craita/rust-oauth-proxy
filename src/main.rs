@@ -1,4 +1,5 @@
 mod filters;
+mod cache;
 
 use warp::{self, http, Filter};
 use warp_reverse_proxy::reverse_proxy_filter;
@@ -6,7 +7,7 @@ use proxy::*;
 use std::collections::HashMap;
 use dotenvy::dotenv;
 use std::env;
-use filters::{log_response, with_auth_client, with_scopes};
+use filters::{log_response, with_auth_client, with_scopes, with_cache};
 
 #[tokio::main]
 async fn main() {
@@ -21,6 +22,8 @@ async fn main() {
 
     let auth_client = build_client(auth_server, token_url, client_id, client_secret, redirect_url);
 
+    let cache = cache::new_cache();
+
     let ping_route = warp::path!("ping")
         .map(|| warp::reply::with_status("pong", http::StatusCode::OK));
 
@@ -33,6 +36,7 @@ async fn main() {
         .and(warp::filters::cookie::optional("pkce"))
         .and(warp::query::<HashMap<String, String>>())
         .and(with_auth_client(auth_client))
+        .and(with_cache(cache.clone()))
         // .recover(handle_errors)
         //.and(warp::header::headers_cloned())
         .and_then(token);

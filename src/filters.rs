@@ -2,6 +2,7 @@ use warp::Filter;
 use oauth2::basic::BasicClient;
 use oauth2::Scope;
 use warp::{self, hyper::Body, Rejection, Reply, http::Response as HttpResponse};
+use crate::cache::Cache;
 
 pub async fn log_response(response: HttpResponse<Body>) -> Result<impl Reply, Rejection> {
     println!("{:?}", response);
@@ -18,4 +19,8 @@ pub fn with_scopes(scopes: String) -> impl Filter<Extract = (Vec<Scope>,), Error
                     .map(|s| Scope::new(s.to_string()))
                     .collect()
                    )
+}
+
+pub fn with_cache(cache: Cache) -> impl Filter<Extract = (Cache,), Error = std::convert::Infallible> + Clone {
+    warp::any().map(move || cache.clone())
 }

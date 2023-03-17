@@ -16,6 +16,6 @@ impl Cookie<'_> {
 
 impl Display for Cookie<'_> {
     fn fmt(&self, f: &mut Formatter<'_>) -> Result {
-        write!(f, "{}={}; Max-Age=86400; HttpOnly", self.name, self.value)
+        write!(f, "{}={}; Max-Age=86400; HttpOnly; Path=/; SameSite=Strict", self.name, self.value)
     }
 }
