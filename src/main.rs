@@ -54,7 +54,7 @@ async fn main() {
                  .or(proxy_route)
                  .or(auth_route)
                  .or(auth_step)
-                 .recover(handle_rejection)
+                 .recover(filters::handle_rejection)
                 );
 
     let port = 3030;
@@ -62,29 +62,4 @@ async fn main() {
     warp::serve(routes)
         .run(([0, 0, 0, 0], port))
         .await;
-}
-
-async fn handle_rejection(err: warp::Rejection) -> Result<warp::http::Response<String>, std::convert::Infallible> {
-    let res = warp::http::Response::builder();
-    if err.is_not_found() {
-        let res= res.status(http::StatusCode::NOT_FOUND)
-            .body("Page not found".to_string())
-            .unwrap();
-        Ok(res)
-    } else if let Some(e) = err.find::<warp::reject::MissingCookie>() {
-        eprintln!("Missing cookie: {:?}", e.name());
-        // cookie is missing so we redirect the user for login
-        let res = res.status(http::StatusCode::TEMPORARY_REDIRECT)
-            .header("Location", "/oauth/auth")
-            .body("".to_string())
-            .unwrap();
-
-        Ok(res)
-    } else {
-        eprintln!("unhandled rejection: {:?}", err);
-        let res= res.status(http::StatusCode::INTERNAL_SERVER_ERROR)
-            .body("Something went wrong!".to_string())
-            .unwrap();
-        Ok(res)
-    }
 }

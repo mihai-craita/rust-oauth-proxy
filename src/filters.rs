@@ -2,10 +2,10 @@ use warp::Filter;
 use oauth2::basic::BasicClient;
 use oauth2::Scope;
 use warp::{self, hyper::Body, Rejection,Reply};
-use warp::http::{Uri, Response as HttpResponse};
+use warp::http;
 use crate::cache::Cache;
 
-pub async fn log_response(response: HttpResponse<Body>) -> Result<impl Reply, Rejection> {
+pub async fn log_response(response: http::Response<Body>) -> Result<impl Reply, Rejection> {
     println!("{:?}", response);
     Ok(response)
 }
@@ -24,6 +24,31 @@ pub fn with_scopes(scopes: String) -> impl Filter<Extract = (Vec<Scope>,), Error
 
 pub fn with_cache(cache: Cache) -> impl Filter<Extract = (Cache,), Error = std::convert::Infallible> + Clone {
     warp::any().map(move || cache.clone())
+}
+
+pub async fn handle_rejection(err: warp::Rejection) -> Result<warp::http::Response<String>, std::convert::Infallible> {
+    let res = warp::http::Response::builder();
+    if err.is_not_found() {
+        let res= res.status(http::StatusCode::NOT_FOUND)
+            .body("Page not found".to_string())
+            .unwrap();
+        Ok(res)
+    } else if let Some(e) = err.find::<warp::reject::MissingCookie>() {
+        eprintln!("Missing cookie: {:?}", e.name());
+        // cookie is missing so we redirect the user for login
+        let res = res.status(http::StatusCode::TEMPORARY_REDIRECT)
+            .header("Location", "/oauth/auth")
+            .body("".to_string())
+            .unwrap();
+
+        Ok(res)
+    } else {
+        eprintln!("unhandled rejection: {:?}", err);
+        let res= res.status(http::StatusCode::INTERNAL_SERVER_ERROR)
+            .body("Something went wrong!".to_string())
+            .unwrap();
+        Ok(res)
+    }
 }
 
 #[derive(Debug)]
