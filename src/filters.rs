@@ -4,6 +4,8 @@ use oauth2::Scope;
 use warp::{self, hyper::Body, Rejection,Reply};
 use warp::http;
 use crate::cache::Cache;
+use futures_util::future;
+use tokio::runtime::Runtime;
 
 pub async fn log_response(response: http::Response<Body>) -> Result<impl Reply, Rejection> {
     println!("{:?}", response);
@@ -49,6 +51,33 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<warp::http::Respon
             .unwrap();
         Ok(res)
     }
+}
+
+pub fn handle_auth_cookie(cache: Cache) -> impl Filter<Extract = (bool,), Error = Rejection> + Clone 
+{
+    warp::filters::cookie::cookie::<String>("proxy_token")
+        .and(with_cache(cache.clone()))
+        .and_then(move |cookie_value: String, cache: Cache| {
+            let found = get_value_from_cache(cache, cookie_value);
+            let rt = Runtime::new().unwrap();
+            let v = match rt.block_on(found) {
+                Some(_) => true,
+                None => false
+            };
+            if v == false {
+                future::ready(Err(warp::reject()))
+            } else {
+                future::ready(Ok::<bool, Rejection>(v))
+            }
+        })
+}
+
+async fn get_value_from_cache(
+    arc_data: Cache,
+    key: String,
+    ) -> Option<String> {
+    let lock = arc_data.lock().await; // Acquire the lock asynchronously
+    lock.get(&key).cloned() // Check if the key exists and return a cloned value if it does
 }
 
 #[derive(Debug)]

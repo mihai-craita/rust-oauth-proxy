@@ -1,16 +1,17 @@
 mod filters;
 mod cache;
 
-use warp::{self, http, Filter};
+use warp::{self, Filter};
 use warp_reverse_proxy::reverse_proxy_filter;
 use proxy::*;
-use std::collections::HashMap;
+use std::{env, collections::HashMap};
 use dotenvy::dotenv;
-use std::env;
-use filters::{log_response, with_auth_client, with_scopes, with_cache};
+use filters::*;
+use cache::new_cache;
 
 #[tokio::main]
 async fn main() {
+
     dotenv().ok();
     let auth_server = env::var("AUTH_SERVER").expect("Missing .env variable AUTH_SERVER");
     let token_url = env::var("TOKEN_URL").expect("Missing .env variable TOKEN_URL");
@@ -20,18 +21,16 @@ async fn main() {
     let scopes = env::var("SCOPES").expect("Missing .env variable SCOPES");
 
     let auth_client = build_client(auth_server, token_url, client_id, client_secret, redirect_url);
+    let cache = new_cache();
 
-    let cache = cache::new_cache();
+    let ping_route = warp::path!("ping").map(|| "pong".to_string());
 
-    let ping_route = warp::path!("ping")
-        .map(|| warp::reply::with_status("pong", http::StatusCode::OK));
-
-    let auth_step = warp::path!("oauth" / "auth")
+    let auth_route = warp::path!("oauth" / "auth")
         .and(with_auth_client(auth_client.clone()))
         .and(with_scopes(scopes))
         .map(redirect);
 
-    let auth_route = warp::path!("oauth" / "callback")
+    let callback_route = warp::path!("oauth" / "callback")
         .and(warp::filters::cookie::optional("pkce"))
         .and(warp::query::<HashMap<String, String>>())
         .and(with_auth_client(auth_client))
@@ -39,10 +38,8 @@ async fn main() {
         .and_then(token);
 
     let proxy_route = warp::any()
-         .and(warp::filters::cookie::cookie::<String>("proxy_token"))
-         .map(|cookie_value: String| {
-             println!("before proxy filter {}", cookie_value);
-         })
+        .and(handle_auth_cookie(cache.clone()))
+        .map(|_v| { () })
         .untuple_one()
         .and(
             reverse_proxy_filter("".to_string(), "http://127.0.0.1:8089/".to_string())
@@ -51,9 +48,9 @@ async fn main() {
 
         let routes = warp::any()
             .and(ping_route
-                 .or(proxy_route)
                  .or(auth_route)
-                 .or(auth_step)
+                 .or(callback_route)
+                 .or(proxy_route)
                  .recover(filters::handle_rejection)
                 );
 
