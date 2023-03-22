@@ -1,5 +1,6 @@
 mod filters;
 mod cache;
+mod errors;
 
 use warp::{self, Filter};
 use warp_reverse_proxy::reverse_proxy_filter;
@@ -7,7 +8,6 @@ use proxy::*;
 use std::{env, collections::HashMap};
 use dotenvy::dotenv;
 use filters::*;
-use cache::new_cache;
 
 #[tokio::main]
 async fn main() {
@@ -21,7 +21,7 @@ async fn main() {
     let scopes = env::var("SCOPES").expect("Missing .env variable SCOPES");
 
     let auth_client = build_client(auth_server, token_url, client_id, client_secret, redirect_url);
-    let cache = new_cache();
+    let cache = cache::new_cache();
 
     let ping_route = warp::path!("ping").map(|| "pong".to_string());
 

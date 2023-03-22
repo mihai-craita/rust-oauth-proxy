@@ -1,15 +1,14 @@
+mod errors;
+mod cookie;
+mod cache;
+
 use cookie::Cookie;
-use warp::reject;
-use warp::{self, http, Rejection, Reply, http::Response as HttpResponse};
+use warp::{self, reject, http, Rejection, Reply, http::Response as HttpResponse};
 use oauth2::basic::BasicClient;
 use oauth2::{AuthorizationCode, AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, PkceCodeVerifier, TokenResponse, TokenUrl};
 use oauth2::reqwest::async_http_client;
 use std::collections::HashMap;
 use uuid::Uuid;
-
-mod errors;
-mod cookie;
-mod cache;
 
 pub fn redirect(auth_client: BasicClient, scopes: Vec<Scope>) -> HttpResponse<String> {
 
@@ -45,6 +44,7 @@ impl Reply for ReplyError {
 pub async fn token(
     cookie: Option<String>, query: HashMap<String, String>, auth_client: BasicClient, cache: cache::Cache) -> Result<HttpResponse<String>, Rejection> {
 
+    println!("Token request");
     let code = query.get("code");
     let code = match code {
         Some(code) => code,
@@ -56,11 +56,10 @@ pub async fn token(
             return  Ok(r)
         }
     };
-
+    println!("The code exists {}", code);
 
     if None == cookie {
-        // None => "Request invalid: Missing cookie on request".to_string(),
-        return Err(reject::custom(errors::ResponseBuildError));
+        return Err(reject::custom(errors::CookieIsMissing));
     }
     let cookie = cookie.unwrap().to_string();
     let pkce_verifier = PkceCodeVerifier::new(cookie);
@@ -71,9 +70,20 @@ pub async fn token(
         .await;
 
     if let Err(err) = token_result {
-        println!("{:#?}", err);
-        let mut tmp = String::from("Auth server ");
+        let more_details = match &err {
+            oauth2::RequestTokenError::ServerResponse(error) => {
+                let mut error_details = String::from("auth server reason: ");
+                error_details.push_str(&error.to_string());
+                error_details
+            },
+            oauth2::RequestTokenError::Parse(_, reason) => String::from_utf8(reason.to_vec()).expect("Found invalid utf-8"),
+            oauth2::RequestTokenError::Other(_) => String::from("other"),
+            _ => String::from("Something else")
+        };
+        let mut tmp = String::from("Auth server response not okay\n");
         tmp.push_str(&err.to_string());
+        tmp.push_str(" | ");
+        tmp.push_str(&more_details.to_string());
         let resp = HttpResponse::builder()
             .body(tmp);
         return match resp {

@@ -4,3 +4,8 @@ use warp::reject::Reject;
 pub struct ResponseBuildError;
 
 impl Reject for ResponseBuildError {}
+
+#[derive(Debug)]
+pub struct CookieIsMissing;
+
+impl Reject for CookieIsMissing {}
