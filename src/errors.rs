@@ -9,3 +9,10 @@ impl Reject for ResponseBuildError {}
 pub struct CookieIsMissing;
 
 impl Reject for CookieIsMissing {}
+
+#[derive(Debug)]
+pub struct UnauthenticatedUser {
+    pub path: String,
+}
+
+impl Reject for UnauthenticatedUser {}

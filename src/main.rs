@@ -1,6 +1,6 @@
-mod filters;
 mod cache;
 mod errors;
+mod filters;
 
 use warp::{self, Filter};
 use warp_reverse_proxy::reverse_proxy_filter;

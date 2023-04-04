@@ -1,6 +1,7 @@
 use warp::Filter;
 use oauth2::basic::BasicClient;
 use oauth2::Scope;
+use warp::path::FullPath;
 use warp::{self, hyper::Body, Rejection,Reply};
 use warp::http;
 use crate::cache::Cache;
@@ -42,6 +43,15 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<warp::http::Respon
 
         Ok(res)
 
+    } else if let Some(e) = err.find::<errors::UnauthenticatedUser>() {
+        eprintln!("User is not authenticated on path {}", e.path);
+        // cookie is missing so we redirect the user for login
+        let res = res.status(http::StatusCode::TEMPORARY_REDIRECT)
+            .header("Location", "/oauth/auth")
+            .body("".to_string())
+            .unwrap();
+
+        Ok(res)
     } else if let Some(e) = err.find::<warp::reject::MissingCookie>() {
         eprintln!("Missing cookie: {:?}", e.name());
         // cookie is missing so we redirect the user for login
@@ -62,21 +72,22 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<warp::http::Respon
 
 pub fn handle_auth_cookie(cache: Cache) -> impl Filter<Extract = (bool,), Error = Rejection> + Clone 
 {
-    warp::filters::cookie::cookie::<String>("proxy_token")
+    warp::filters::cookie::optional::<String>("proxy_token")
         .and(with_cache(cache.clone()))
-        .and_then(|cookie_value: String, cache: Cache| async move {
+        .and(warp::path::full())
+        .and_then(|cookie_value: Option<String>, cache: Cache, full_path: FullPath| async move {
             let found = get_value_from_cache(cache, cookie_value);
             match found.await {
                 Some(_) => Ok::<bool, Rejection>(true),
-                None => Err(warp::reject())
+                None => Err(warp::reject::custom(errors::UnauthenticatedUser{path: full_path.as_str().to_string()}))
             }
         })
 }
 
-async fn get_value_from_cache(
-    arc_data: Cache,
-    key: String,
-    ) -> Option<String> {
+async fn get_value_from_cache(arc_data: Cache, key: Option<String>) -> Option<String> {
     let lock = arc_data.lock().await; // Acquire the lock asynchronously
-    lock.get(&key).cloned() // Check if the key exists and return a cloned value if it does
+    match key {
+        Some(k) => lock.get(&k).cloned(),
+        None => None
+    }
 }
