@@ -66,14 +66,9 @@ pub fn handle_auth_cookie(cache: Cache) -> impl Filter<Extract = (bool,), Error 
         .and(with_cache(cache.clone()))
         .and_then(|cookie_value: String, cache: Cache| async move {
             let found = get_value_from_cache(cache, cookie_value);
-            let v = match found.await {
-                Some(_) => true,
-                None => false
-            };
-            if v == false {
-                Err(warp::reject())
-            } else {
-                Ok::<bool, Rejection>(v)
+            match found.await {
+                Some(_) => Ok::<bool, Rejection>(true),
+                None => Err(warp::reject())
             }
         })
 }
