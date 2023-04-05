@@ -22,15 +22,13 @@ pub fn redirect(auth_client: BasicClient, scopes: Vec<Scope>) -> HttpResponse<St
 
     let auth_url = auth_url.to_string();
 
-    let body = format!("Go here to login: \n<br><a href=\"{}\">{}</a>\n\n", auth_url, auth_url);
-
     let cookie = cookie::Cookie::new("pkce", pkce_verifier.secret().to_string());
-    let resp = HttpResponse::builder()
-        .status(http::StatusCode::OK)
-        .header(http::header::CONTENT_TYPE, "text/html; charset=utf-8")
+    HttpResponse::builder()
+        .status(http::StatusCode::TEMPORARY_REDIRECT)
+        .header("Location", auth_url)
         .header(http::header::SET_COOKIE, cookie.to_string())
-        .body(body).unwrap();
-    resp
+        .body("".to_string())
+        .unwrap()
 }
 
 pub struct ReplyError;
