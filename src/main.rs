@@ -17,6 +17,7 @@ async fn main() {
     let client_secret = env::var("CLIENT_SECRET").expect("Missing .env variable CLIENT_SECRET");
     let redirect_url = env::var("REDIRECT_URL").expect("Missing .env REDIRECT_URL");
     let scopes = env::var("SCOPES").expect("Missing .env variable SCOPES");
+    let origin_server = env::var("ORIGIN_SERVER").expect(".env variable ORIGIN_SERVER");
 
     let auth_client = build_client(auth_server, token_url, client_id, client_secret, redirect_url);
     let cache = cache::new_cache();
@@ -40,7 +41,7 @@ async fn main() {
         .and(handle_auth_cookie(cache.clone()))
         .untuple_one()
         .and(
-            reverse_proxy_filter("".to_string(), "http://127.0.0.1:8089/".to_string())
+            reverse_proxy_filter("".to_string(), origin_server)
             .and_then(log_response)
             );
 
