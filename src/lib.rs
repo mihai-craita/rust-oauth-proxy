@@ -1,9 +1,9 @@
-mod errors;
 pub mod cache;
 pub mod cookie;
+mod errors;
 pub mod filters;
 
-use warp::{self, reject, http, Rejection, Reply, http::Response as HttpResponse};
+use warp::{self, reject, http, Rejection, http::Response as HttpResponse};
 use oauth2::basic::BasicClient;
 use oauth2::{AuthorizationCode, AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, PkceCodeVerifier, TokenResponse, TokenUrl};
 use oauth2::reqwest::async_http_client;
@@ -31,18 +31,14 @@ pub fn redirect(auth_client: BasicClient, scopes: Vec<Scope>) -> HttpResponse<St
         .unwrap()
 }
 
-pub struct ReplyError;
-
-impl Reply for ReplyError {
-    fn into_response(self) -> warp::reply::Response {
-        HttpResponse::new(format!("message: " ).into())
-    }
-}
-
 pub async fn token(
-    cookie: Option<String>, query: HashMap<String, String>, auth_client: BasicClient, cache: cache::Cache) -> Result<HttpResponse<String>, Rejection> {
+    cookie: Option<String>,
+    redirect_url: Option<String>,
+    query: HashMap<String, String>,
+    auth_client: BasicClient,
+    cache: cache::Cache
+) -> Result<HttpResponse<String>, Rejection> {
 
-    println!("Token request");
     let code = query.get("code");
     let code = match code {
         Some(code) => code,
@@ -54,7 +50,6 @@ pub async fn token(
             return  Ok(r)
         }
     };
-    println!("The code exists {}", code);
 
     if None == cookie {
         return Err(reject::custom(errors::CookieIsMissing));
@@ -95,13 +90,15 @@ pub async fn token(
     let mut hash = cache.lock().await;
     hash.insert(session_id.to_string(), token.to_string());
 
-    let cookie = cookie::Cookie::new("proxy_token", session_id.to_string());
+    let redirect_url = redirect_url.unwrap_or("/".to_string());
 
-    let body = format!("Token was read");
+    let cookie = cookie::Cookie::new("proxy_token", session_id.to_string());
     let resp = HttpResponse::builder()
+        .status(http::StatusCode::TEMPORARY_REDIRECT)
         .header(http::header::SET_COOKIE, cookie.to_string())
-        .body(body);
-    return match resp {
+        .header(http::header::LOCATION, redirect_url)
+        .body("".to_string());
+    match resp {
         Ok(resp) => Ok(resp),
         Err(_err) => Err(reject::custom(errors::ResponseBuildError)),
     }

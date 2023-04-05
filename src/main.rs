@@ -30,6 +30,7 @@ async fn main() {
 
     let callback_route = warp::path!("oauth" / "callback")
         .and(warp::filters::cookie::optional("pkce"))
+        .and(warp::filters::cookie::optional("redirect_url"))
         .and(warp::query::<HashMap<String, String>>())
         .and(with_auth_client(auth_client))
         .and(with_cache(cache.clone()))
