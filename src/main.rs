@@ -1,13 +1,11 @@
-mod cache;
 mod errors;
-mod filters;
 
 use warp::{self, Filter};
 use warp_reverse_proxy::reverse_proxy_filter;
 use proxy::*;
+use proxy::filters::*;
 use std::{env, collections::HashMap};
 use dotenvy::dotenv;
-use filters::*;
 
 #[tokio::main]
 async fn main() {
@@ -39,7 +37,6 @@ async fn main() {
 
     let proxy_route = warp::any()
         .and(handle_auth_cookie(cache.clone()))
-        .map(|_v| { () })
         .untuple_one()
         .and(
             reverse_proxy_filter("".to_string(), "http://127.0.0.1:8089/".to_string())

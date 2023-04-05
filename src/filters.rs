@@ -4,8 +4,7 @@ use oauth2::Scope;
 use warp::path::FullPath;
 use warp::{self, hyper::Body, Rejection,Reply};
 use warp::http;
-use crate::cache::Cache;
-use crate::errors;
+use crate::{errors, cache::Cache, cookie};
 
 pub async fn log_response(response: http::Response<Body>) -> Result<impl Reply, Rejection> {
     println!("{:?}", response);
@@ -45,9 +44,14 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<warp::http::Respon
 
     } else if let Some(e) = err.find::<errors::UnauthenticatedUser>() {
         eprintln!("User is not authenticated on path {}", e.path);
+        if e.path.eq("/favicon.ico") {
+            return Ok(res.status(http::StatusCode::NOT_FOUND).body("".to_string()).unwrap());
+        };
+        let cookie = cookie::Cookie::new("redirect_url", e.path.clone());
         // cookie is missing so we redirect the user for login
         let res = res.status(http::StatusCode::TEMPORARY_REDIRECT)
             .header("Location", "/oauth/auth")
+            .header(http::header::SET_COOKIE, cookie.to_string())
             .body("".to_string())
             .unwrap();
 
@@ -70,7 +74,7 @@ pub async fn handle_rejection(err: warp::Rejection) -> Result<warp::http::Respon
     }
 }
 
-pub fn handle_auth_cookie(cache: Cache) -> impl Filter<Extract = (bool,), Error = Rejection> + Clone 
+pub fn handle_auth_cookie(cache: Cache) -> impl Filter<Extract = ((),), Error = Rejection> + Clone 
 {
     warp::filters::cookie::optional::<String>("proxy_token")
         .and(with_cache(cache.clone()))
@@ -78,7 +82,7 @@ pub fn handle_auth_cookie(cache: Cache) -> impl Filter<Extract = (bool,), Error 
         .and_then(|cookie_value: Option<String>, cache: Cache, full_path: FullPath| async move {
             let found = get_value_from_cache(cache, cookie_value);
             match found.await {
-                Some(_) => Ok::<bool, Rejection>(true),
+                Some(_) => Ok::<(), Rejection>(()),
                 None => Err(warp::reject::custom(errors::UnauthenticatedUser{path: full_path.as_str().to_string()}))
             }
         })

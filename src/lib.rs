@@ -1,8 +1,8 @@
 mod errors;
-mod cookie;
-mod cache;
+pub mod cache;
+pub mod cookie;
+pub mod filters;
 
-use cookie::Cookie;
 use warp::{self, reject, http, Rejection, Reply, http::Response as HttpResponse};
 use oauth2::basic::BasicClient;
 use oauth2::{AuthorizationCode, AuthUrl, ClientId, ClientSecret, CsrfToken, PkceCodeChallenge, RedirectUrl, Scope, PkceCodeVerifier, TokenResponse, TokenUrl};
@@ -24,7 +24,7 @@ pub fn redirect(auth_client: BasicClient, scopes: Vec<Scope>) -> HttpResponse<St
 
     let body = format!("Go here to login: \n<br><a href=\"{}\">{}</a>\n\n", auth_url, auth_url);
 
-    let cookie = Cookie::new("pkce", pkce_verifier.secret().to_string());
+    let cookie = cookie::Cookie::new("pkce", pkce_verifier.secret().to_string());
     let resp = HttpResponse::builder()
         .status(http::StatusCode::OK)
         .header(http::header::CONTENT_TYPE, "text/html; charset=utf-8")
@@ -97,7 +97,7 @@ pub async fn token(
     let mut hash = cache.lock().await;
     hash.insert(session_id.to_string(), token.to_string());
 
-    let cookie = Cookie::new("proxy_token", session_id.to_string());
+    let cookie = cookie::Cookie::new("proxy_token", session_id.to_string());
 
     let body = format!("Token was read");
     let resp = HttpResponse::builder()
